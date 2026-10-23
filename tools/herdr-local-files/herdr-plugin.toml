@@ -1,0 +1,18 @@
+id = "codex.local-files"
+name = "Codex local files in Finder"
+version = "0.1.0"
+min_herdr_version = "0.9.0"
+description = "Reveal clicked local file hyperlinks in Finder."
+platforms = ["macos"]
+
+[[actions]]
+id = "reveal"
+title = "Reveal local file in Finder"
+contexts = ["workspace"]
+command = ["/usr/bin/python3", "open_file.py"]
+
+[[link_handlers]]
+id = "local-file"
+title = "Reveal local file in Finder"
+pattern = "^file://"
+action = "reveal"

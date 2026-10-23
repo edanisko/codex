@@ -51,6 +51,8 @@ use crate::render::line_utils::line_to_static;
 use crate::style::accent_color;
 use crate::style::table_separator_style;
 use crate::terminal_hyperlinks::HyperlinkLine;
+use crate::terminal_hyperlinks::TerminalHyperlink;
+use crate::terminal_hyperlinks::TrustedWorkspaceFile;
 use crate::terminal_hyperlinks::remap_wrapped_line;
 use crate::terminal_hyperlinks::visible_lines;
 use crate::terminal_hyperlinks::web_destination;
@@ -94,6 +96,7 @@ pub(crate) use list_spacing::ListSpacing;
 use list_spacing::UniformList;
 use local_links::is_local_path_like_link;
 use local_links::render_local_link_target;
+use local_links::resolve_workspace_document;
 pub(crate) use streaming::StreamingMarkdownRender;
 pub(crate) use streaming::render_streaming_markdown_lines_with_width_and_cwd;
 #[cfg(test)]
@@ -440,6 +443,7 @@ pub(crate) fn render_markdown_lines_with_width_cwd_and_hidden_link_destinations(
 #[derive(Clone, Debug)]
 struct LinkState {
     destination: String,
+    local_file: Option<TrustedWorkspaceFile>,
     show_destination: bool,
     style_label: bool,
     has_visible_label: bool,
@@ -2185,7 +2189,14 @@ impl<'a, 'policy> Writer<'a, 'policy> {
     }
 
     fn push_link(&mut self, dest_url: String) {
-        let style_label = (self.is_hidden_link_destination)(&dest_url);
+        let local_file = if preferences::local_file_links_enabled() {
+            self.cwd
+                .as_deref()
+                .and_then(|cwd| resolve_workspace_document(&dest_url, cwd))
+        } else {
+            None
+        };
+        let style_label = local_file.is_some() || (self.is_hidden_link_destination)(&dest_url);
         if style_label {
             self.push_inline_style(self.styles.link);
         }
@@ -2194,7 +2205,7 @@ impl<'a, 'policy> Writer<'a, 'policy> {
             show_destination,
             style_label,
             has_visible_label: false,
-            local_target_display: if is_local_path_like_link(&dest_url) {
+            local_target_display: if local_file.is_some() || is_local_path_like_link(&dest_url) {
                 Some(
                     render_local_link_target(&dest_url, self.cwd.as_deref())
                         .unwrap_or_else(|| dest_url.clone()),
@@ -2204,6 +2215,7 @@ impl<'a, 'policy> Writer<'a, 'policy> {
             },
             local_label_spans: Vec::new(),
             local_label_inline: Vec::new(),
+            local_file,
             destination: dest_url,
         });
     }
@@ -2241,6 +2253,38 @@ impl<'a, 'policy> Writer<'a, 'policy> {
                     );
                     self.push_annotated(destination);
                     self.push_span(")".into());
+                }
+            } else if let Some(file) = link.local_file {
+                let mut spans = link.local_label_spans;
+                let mut inlines = link.local_label_inline;
+                if !spans.iter().any(|span| !span.content.trim().is_empty()) {
+                    spans = vec![Span::raw(
+                        link.local_target_display.unwrap_or(link.destination),
+                    )];
+                    inlines = vec![vec![crate::markdown_copy::Inline::Literal]];
+                }
+                for (span, inline) in spans.into_iter().zip(inlines) {
+                    let style = span.style.patch(self.styles.link);
+                    let mut annotated = HyperlinkLine::new(Line::from(span.style(style)));
+                    if annotated.width() > 0 {
+                        annotated
+                            .hyperlinks
+                            .push(TerminalHyperlink::trusted_workspace_file(
+                                0..annotated.width(),
+                                file.clone(),
+                            ));
+                    }
+                    let previous = std::mem::replace(&mut self.copy_inline, inline);
+                    if self.in_table_cell() {
+                        if let Some(table_state) = self.table_state.as_mut()
+                            && let Some(cell) = table_state.current_cell.as_mut()
+                        {
+                            cell.push_annotated(annotated, &self.copy_inline);
+                        }
+                    } else {
+                        self.push_annotated(annotated);
+                    }
+                    self.copy_inline = previous;
                 }
             } else if let Some(local_target_display) = link.local_target_display {
                 let show_label = link

@@ -365,12 +365,13 @@ impl App {
             }
         }
         self.chat_widget.snapshot_local_images = self.app_server_target.uses_remote_workspace();
-        self.chat_widget.set_local_worktree_operations(
-            !crate::uses_remote_workspace_or_environment(
-                &self.app_server_target,
-                self.environment_manager.as_ref(),
-            ),
+        let workspace_is_local = !crate::uses_remote_workspace_or_environment(
+            &self.app_server_target,
+            self.environment_manager.as_ref(),
         );
+        self.chat_widget
+            .set_local_worktree_operations(workspace_is_local);
+        crate::markdown_render::preferences::set_workspace_is_local(workspace_is_local);
         self.chat_widget.windows_sandbox_local_server =
             !self.app_server_target.uses_remote_workspace()
                 && app_server.app_server_platform_os() == Some("windows");

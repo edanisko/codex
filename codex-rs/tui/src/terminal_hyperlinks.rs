@@ -50,11 +50,12 @@ pub(crate) struct TerminalHyperlink {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum DestinationKind {
     Web,
-    /// A generated visualization or a capability-validated spoken workspace artifact.
+    /// A generated visualization or a validated workspace artifact.
     TrustedFile,
 }
 
-/// An existing, inert source file proven to remain inside its session workspace.
+/// An existing, inert document or source file confined to its session workspace.
+#[derive(Clone, Debug)]
 pub(crate) struct TrustedWorkspaceFile(Url);
 
 const SAFE_WORKSPACE_EXTENSIONS: &[&str] = &[
@@ -63,6 +64,35 @@ const SAFE_WORKSPACE_EXTENSIONS: &[&str] = &[
 ];
 
 impl TrustedWorkspaceFile {
+    /// Validate an explicitly linked workspace document without broadening spoken-file discovery.
+    pub(crate) fn validate_markdown_document(
+        workspace: &Path,
+        path: &Path,
+        location: Option<&str>,
+    ) -> Option<Self> {
+        const DOCUMENT_EXTENSIONS: &[&str] = &[
+            "md", "txt", "csv", "tsv", "pdf", "png", "jpg", "jpeg", "gif", "webp", "zip", "docx",
+            "xlsx", "pptx",
+        ];
+        let workspace = workspace.canonicalize().ok()?;
+        let target = workspace.join(path).canonicalize().ok()?;
+        let relative = target.strip_prefix(&workspace).ok()?;
+        let extension = target.extension()?.to_str()?.to_ascii_lowercase();
+        if !target.is_file()
+            || path.extension()?.to_str()?.to_ascii_lowercase() != extension
+            || (!SAFE_WORKSPACE_EXTENSIONS.contains(&extension.as_str())
+                && !DOCUMENT_EXTENSIONS.contains(&extension.as_str()))
+            || relative
+                .iter()
+                .any(|part| part.to_string_lossy().starts_with('.'))
+        {
+            return None;
+        }
+        let mut url = Url::from_file_path(target).ok()?;
+        url.set_fragment(location);
+        Some(Self(url))
+    }
+
     pub(crate) fn validate(workspace: &Path, candidate: &str) -> Option<Self> {
         if candidate.is_empty()
             || candidate.len() > 512
@@ -106,8 +136,8 @@ impl TerminalHyperlink {
     }
 
     pub(crate) fn retarget_to_trusted_file(&mut self, destination: &Url) {
-        // General Markdown never promotes file URLs. Only generated visualization links use this
-        // path; spoken workspace artifacts require a separately validated capability.
+        // Generated visualizations use this path. Workspace documents require a separately
+        // validated capability before they receive a file URL.
         debug_assert_eq!(destination.scheme(), "file");
         self.destination = destination.to_string();
         self.destination_kind = DestinationKind::TrustedFile;

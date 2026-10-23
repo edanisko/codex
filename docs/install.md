@@ -49,6 +49,54 @@ just test
 # time and `target/` disk usage by compiling additional feature combinations.
 ```
 
+## Fork: local file links in Herdr on macOS
+
+This fork adds opt-in terminal hyperlinks for explicit Markdown links to existing
+workspace documents, source files, images, PDFs, and ZIP archives. The Markdown
+label stays visible and clickable. Local links are disabled for remote app-server
+connections and remote default execution environments. Missing files, files outside
+the workspace, hidden files, and executable document types keep the normal text fallback.
+
+Build the CLI from this checkout:
+
+```sh
+cd codex-rs
+cargo build -p codex-cli --bin codex
+```
+
+Launch the resulting binary with the feature enabled:
+
+```sh
+./target/debug/codex -c tui.rendering.local_file_links=true
+```
+
+The included launcher enables the setting and uses an embedded app server from
+the same build. From `codex-rs`, run `../tools/herdr-local-files/codex-herdr`.
+It also works through a symlink on your PATH and forwards additional CLI arguments.
+
+For persistent configuration in this fork, set:
+
+```toml
+[tui.rendering]
+local_file_links = true
+```
+
+Herdr needs a file URL handler to act on these hyperlinks. From the repository root,
+register the included macOS plugin:
+
+```sh
+herdr plugin link "$PWD/tools/herdr-local-files" --enabled
+```
+
+Keep Herdr's mouse capture enabled. Ctrl-clicking a linked document or archive
+reveals it in Finder. The handler uses an argument list and never executes the
+linked file. Line references remain in hyperlink metadata; Finder does not jump
+to a source line. Inline code and ordinary unlinked paths stay plain text.
+
+Unregister the plugin with `herdr plugin unlink codex.local-files`. Registration
+points to this checkout, so relink it after moving the repository. Stock Codex
+does not support this fork's `local_file_links` setting.
+
 ## Tracing / verbose logging
 
 Codex is written in Rust, so it honors the `RUST_LOG` environment variable to configure its logging behavior.
