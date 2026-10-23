@@ -17,6 +17,9 @@ pub struct TuiRendering {
     pub tables: bool,
     /// Render Markdown bullets and task-list markers as Unicode symbols.
     pub lists: bool,
+    /// Emit terminal hyperlinks for existing documents inside a local session workspace.
+    /// Disabled by default. The terminal or multiplexer owns click handling.
+    pub local_file_links: bool,
 }
 
 impl Default for TuiRendering {
@@ -26,6 +29,7 @@ impl Default for TuiRendering {
             math: true,
             tables: true,
             lists: true,
+            local_file_links: false,
         }
     }
 }

@@ -6,6 +6,31 @@
 use codex_config::types::TuiRendering;
 
 #[cfg(not(test))]
+static WORKSPACE_IS_LOCAL: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(test)]
+thread_local! {
+    static WORKSPACE_IS_LOCAL: std::cell::Cell<bool> = const { std::cell::Cell::new(true) };
+}
+
+/// Remote execution paths must never be resolved against the frontend's filesystem.
+pub(crate) fn set_workspace_is_local(is_local: bool) {
+    #[cfg(not(test))]
+    WORKSPACE_IS_LOCAL.store(is_local, std::sync::atomic::Ordering::Relaxed);
+    #[cfg(test)]
+    WORKSPACE_IS_LOCAL.set(is_local);
+}
+
+pub(crate) fn local_file_links_enabled() -> bool {
+    #[cfg(not(test))]
+    let is_local = WORKSPACE_IS_LOCAL.load(std::sync::atomic::Ordering::Relaxed);
+    #[cfg(test)]
+    let is_local = WORKSPACE_IS_LOCAL.get();
+    is_local && current().local_file_links
+}
+
+#[cfg(not(test))]
 static RENDERING: std::sync::LazyLock<std::sync::RwLock<TuiRendering>> =
     std::sync::LazyLock::new(|| std::sync::RwLock::new(TuiRendering::default()));
 

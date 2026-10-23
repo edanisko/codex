@@ -1,0 +1,18 @@
+#!/usr/bin/python3
+"""Launch this fork with local workspace links and an embedded app server."""
+
+import os
+from pathlib import Path
+import sys
+
+
+repository = Path(__file__).resolve().parents[2]
+binary = repository / "codex-rs/target/debug/codex"
+if not binary.is_file():
+    raise SystemExit(
+        "Build this fork first: cd {}/codex-rs && cargo build -p codex-cli --bin codex".format(repository)
+    )
+os.execv(
+    str(binary),
+    [str(binary), "--no-daemon", "-c", "tui.rendering.local_file_links=true", *sys.argv[1:]],
+)

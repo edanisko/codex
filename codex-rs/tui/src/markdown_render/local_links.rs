@@ -1,9 +1,8 @@
 //! Local file-link destination parsing and display for Markdown transcripts.
 //!
-//! Local Markdown links preserve their labels. Since ordinary file destinations have no trusted
-//! navigation capability, the renderer also displays their target, shortening absolute paths
-//! relative to the session working directory when possible. This module only formats destinations;
-//! it does not resolve files or infer execution-host paths from the frontend filesystem.
+//! Local Markdown links preserve their labels and normally display their target. Explicitly
+//! enabled local workspace links may receive a validated document capability; remote execution
+//! paths are never resolved against the frontend filesystem.
 
 use codex_utils_path_uri::PathUri;
 use codex_utils_string::normalize_markdown_hash_location_suffix;
@@ -11,6 +10,38 @@ use regex_lite::Regex;
 use std::path::Path;
 use std::sync::LazyLock;
 use url::Url;
+
+use crate::terminal_hyperlinks::TrustedWorkspaceFile;
+
+pub(super) fn resolve_workspace_document(
+    destination: &str,
+    workspace: &Path,
+) -> Option<TrustedWorkspaceFile> {
+    if destination.len() > 8 * 1024 || destination.chars().any(char::is_control) {
+        return None;
+    }
+    let (path, location) = parse_local_link_target(destination)?;
+    if destination.starts_with("file:") {
+        let url = Url::parse(destination).ok()?;
+        if !matches!(url.host_str(), None | Some("localhost")) || url.query().is_some() {
+            return None;
+        }
+    } else if !Path::new(&path).is_absolute() && Url::parse(&path).is_ok() {
+        return None;
+    }
+    if path.chars().any(char::is_control) || path.starts_with("~/") {
+        return None;
+    }
+    let location = location.map(|suffix| match suffix.strip_prefix('#') {
+        Some(fragment) => fragment.to_string(),
+        None => format!("L{}", suffix.trim_start_matches(':').replace(':', "C")),
+    });
+    TrustedWorkspaceFile::validate_markdown_document(
+        workspace,
+        Path::new(&path),
+        location.as_deref(),
+    )
+}
 
 static COLON_LOCATION_SUFFIX_RE: LazyLock<Regex> =
     LazyLock::new(

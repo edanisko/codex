@@ -198,7 +198,17 @@ fn rendering_preferences_default_individually_and_ignore_animation_switch() {
                 math: key != "math",
                 tables: key != "tables",
                 lists: key != "lists",
+                local_file_links: false,
             }
         );
     }
+}
+
+#[test]
+fn local_file_links_require_explicit_opt_in() {
+    let defaults: Tui = toml::from_str("").unwrap();
+    assert!(!defaults.rendering.local_file_links);
+    let enabled: Tui = toml::from_str("[rendering]\nlocal_file_links = true\n").unwrap();
+    assert!(enabled.rendering.local_file_links);
+    assert!(enabled.rendering.tables);
 }
